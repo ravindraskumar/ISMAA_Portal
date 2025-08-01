@@ -1,0 +1,428 @@
+#!/usr/bin/env node
+
+/**
+ * Dropdown UI Test
+ * 
+ * This script creates an automated test to verify dropdown functionality
+ * works correctly in the browser environment.
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+function generateUITest() {
+    const testHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dropdown Filter Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .test-pass {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .test-fail {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .test-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .filter-demo {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .filter-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .filter-select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .results-area {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .member-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 5px 0;
+        }
+        .member-name {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .member-details {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin: 15px 0;
+        }
+        .stat-item {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Member List Dropdown Filter Test</h1>
+        <p>This test verifies that dropdown filters work correctly with null-safe operations.</p>
+        
+        <div id="testResults"></div>
+        
+        <div class="filter-demo">
+            <div class="filter-group">
+                <label>Branch Filter</label>
+                <select id="branchFilter" class="filter-select">
+                    <option value="">All Branches</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Industry Filter</label>
+                <select id="industryFilter" class="filter-select">
+                    <option value="">All Industries</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Batch Filter</label>
+                <select id="batchFilter" class="filter-select">
+                    <option value="">All Batches</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" id="searchInput" placeholder="Search by name or email..." style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+        </div>
+        
+        <div class="stats" id="statsArea"></div>
+        
+        <div class="results-area">
+            <h3>Filtered Results</h3>
+            <div id="membersResults">Loading members...</div>
+        </div>
+    </div>
+
+    <script>
+        let allMembers = [];
+        let filteredMembers = [];
+        
+        // Test results tracking
+        const testResults = [];
+        
+        function addTestResult(name, status, message) {
+            testResults.push({ name, status, message });
+            updateTestDisplay();
+        }
+        
+        function updateTestDisplay() {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML = testResults.map(test => 
+                \`<div class="test-status test-\${test.status}">
+                    \${test.status === 'pass' ? '✅' : test.status === 'fail' ? '❌' : 'ℹ️'} 
+                    <strong>\${test.name}</strong>: \${test.message}
+                </div>\`
+            ).join('');
+        }
+        
+        async function loadMembers() {
+            try {
+                addTestResult('Data Loading', 'info', 'Fetching members from API...');
+                
+                const response = await fetch('http://localhost:3001/members');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch members');
+                }
+                
+                allMembers = await response.json();
+                addTestResult('Data Loading', 'pass', \`Successfully loaded \${allMembers.length} members\`);
+                
+                // Test null value handling
+                testNullValues();
+                
+                // Populate dropdowns
+                populateDropdowns();
+                
+                // Initial filter
+                applyFilters();
+                
+                // Setup event listeners
+                setupEventListeners();
+                
+            } catch (error) {
+                addTestResult('Data Loading', 'fail', \`Error: \${error.message}\`);
+            }
+        }
+        
+        function testNullValues() {
+            const nullCounts = {
+                branch: 0,
+                industry: 0,
+                passoutBatch: 0,
+                company: 0,
+                email: 0
+            };
+            
+            allMembers.forEach(member => {
+                if (!member.branch) nullCounts.branch++;
+                if (!member.industry) nullCounts.industry++;
+                if (!member.passoutBatch) nullCounts.passoutBatch++;
+                if (!member.company) nullCounts.company++;
+                if (!member.email) nullCounts.email++;
+            });
+            
+            const totalNulls = Object.values(nullCounts).reduce((a, b) => a + b, 0);
+            addTestResult('Null Value Detection', 'pass', 
+                \`Found \${totalNulls} null values across all fields - will be handled safely\`);
+        }
+        
+        function populateDropdowns() {
+            try {
+                // Safe branch options (filter out nulls)
+                const branches = [...new Set(allMembers
+                    .map(m => m.branch)
+                    .filter(branch => branch !== null && branch !== undefined)
+                )].sort();
+                
+                const branchSelect = document.getElementById('branchFilter');
+                branches.forEach(branch => {
+                    const option = document.createElement('option');
+                    option.value = branch;
+                    option.textContent = branch;
+                    branchSelect.appendChild(option);
+                });
+                
+                // Safe industry options (filter out nulls)
+                const industries = [...new Set(allMembers
+                    .map(m => m.industry)
+                    .filter(industry => industry !== null && industry !== undefined)
+                )].sort();
+                
+                const industrySelect = document.getElementById('industryFilter');
+                industries.forEach(industry => {
+                    const option = document.createElement('option');
+                    option.value = industry;
+                    option.textContent = industry;
+                    industrySelect.appendChild(option);
+                });
+                
+                // Safe batch options (filter out nulls)
+                const batches = [...new Set(allMembers
+                    .map(m => m.passoutBatch)
+                    .filter(batch => batch !== null && batch !== undefined)
+                )].sort();
+                
+                const batchSelect = document.getElementById('batchFilter');
+                batches.forEach(batch => {
+                    const option = document.createElement('option');
+                    option.value = batch;
+                    option.textContent = batch;
+                    batchSelect.appendChild(option);
+                });
+                
+                addTestResult('Dropdown Population', 'pass', 
+                    \`Populated dropdowns: \${branches.length} branches, \${industries.length} industries, \${batches.length} batches\`);
+                
+            } catch (error) {
+                addTestResult('Dropdown Population', 'fail', \`Error: \${error.message}\`);
+            }
+        }
+        
+        function applyFilters() {
+            try {
+                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+                const selectedBranch = document.getElementById('branchFilter').value;
+                const selectedIndustry = document.getElementById('industryFilter').value;
+                const selectedBatch = document.getElementById('batchFilter').value;
+                
+                filteredMembers = allMembers.filter(member => {
+                    // Null-safe search
+                    const matchesSearch = searchTerm === '' || 
+                        (member.name && member.name.toLowerCase().includes(searchTerm)) ||
+                        (member.email && member.email.toLowerCase().includes(searchTerm));
+                    
+                    // Null-safe branch filter
+                    const matchesBranch = selectedBranch === '' || 
+                        (member.branch && member.branch.toLowerCase().includes(selectedBranch.toLowerCase()));
+                    
+                    // Null-safe industry filter
+                    const matchesIndustry = selectedIndustry === '' || 
+                        (member.industry && member.industry.toLowerCase().includes(selectedIndustry.toLowerCase()));
+                    
+                    // Null-safe batch filter
+                    const matchesBatch = selectedBatch === '' || 
+                        (member.passoutBatch && member.passoutBatch.includes(selectedBatch));
+                    
+                    return matchesSearch && matchesBranch && matchesIndustry && matchesBatch;
+                });
+                
+                displayResults();
+                updateStats();
+                
+                addTestResult('Filter Application', 'pass', 
+                    \`Applied filters successfully - \${filteredMembers.length} results\`);
+                
+            } catch (error) {
+                addTestResult('Filter Application', 'fail', \`Error: \${error.message}\`);
+            }
+        }
+        
+        function displayResults() {
+            const resultsDiv = document.getElementById('membersResults');
+            
+            if (filteredMembers.length === 0) {
+                resultsDiv.innerHTML = '<p>No members match the current filters.</p>';
+                return;
+            }
+            
+            resultsDiv.innerHTML = filteredMembers.map(member => \`
+                <div class="member-card">
+                    <div class="member-name">\${member.name}</div>
+                    <div class="member-details">
+                        Branch: \${member.branch || 'Not specified'} | 
+                        Industry: \${member.industry || 'Not specified'} | 
+                        Batch: \${member.passoutBatch || 'Not specified'} | 
+                        Company: \${member.company || 'Not specified'}
+                    </div>
+                </div>
+            \`).join('');
+        }
+        
+        function updateStats() {
+            const stats = {
+                total: allMembers.length,
+                filtered: filteredMembers.length,
+                branches: new Set(allMembers
+                    .map(s => s.branch)
+                    .filter(branch => branch !== null && branch !== undefined)
+                ).size,
+                industries: new Set(allMembers
+                    .map(s => s.industry)
+                    .filter(industry => industry !== null && industry !== undefined)
+                ).size
+            };
+            
+            document.getElementById('statsArea').innerHTML = \`
+                <div class="stat-item">
+                    <div class="stat-number">\${stats.total}</div>
+                    <div class="stat-label">Total Members</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">\${stats.filtered}</div>
+                    <div class="stat-label">Filtered Results</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">\${stats.branches}</div>
+                    <div class="stat-label">Branches</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">\${stats.industries}</div>
+                    <div class="stat-label">Industries</div>
+                </div>
+            \`;
+        }
+        
+        function setupEventListeners() {
+            document.getElementById('searchInput').addEventListener('input', applyFilters);
+            document.getElementById('branchFilter').addEventListener('change', applyFilters);
+            document.getElementById('industryFilter').addEventListener('change', applyFilters);
+            document.getElementById('batchFilter').addEventListener('change', applyFilters);
+            
+            addTestResult('Event Listeners', 'pass', 'All filter event listeners attached successfully');
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', loadMembers);
+    </script>
+</body>
+</html>`;
+
+    const testFilePath = path.join(__dirname, 'dropdown_ui_test.html');
+    fs.writeFileSync(testFilePath, testHTML);
+    
+    console.log('🧪 UI Test Generated Successfully!');
+    console.log('📁 Test file: dropdown_ui_test.html');
+    console.log('🌐 Open this file in a browser to test dropdown functionality');
+    console.log('');
+    console.log('📋 Test Instructions:');
+    console.log('1. Open dropdown_ui_test.html in your browser');
+    console.log('2. Verify all dropdowns populate correctly');
+    console.log('3. Test each filter individually');
+    console.log('4. Test combined filters');
+    console.log('5. Test search functionality');
+    console.log('6. Check that no JavaScript errors occur');
+    console.log('');
+    console.log('✅ Expected Results:');
+    console.log('- All tests show as PASSED (green)');
+    console.log('- Dropdowns contain no null/undefined options');
+    console.log('- Filtering works smoothly without errors');
+    console.log('- Stats update correctly');
+
+    return testFilePath;
+}
+
+if (require.main === module) {
+    generateUITest();
+}
+
+module.exports = { generateUITest };

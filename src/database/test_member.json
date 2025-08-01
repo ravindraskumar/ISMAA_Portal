@@ -1,0 +1,15 @@
+{
+  "id": 1759999999999,
+  "name": "Test User Custom Values",
+  "email": "testuser@customvalues.com",
+  "phone": "+91-9876543210",
+  "address": "Test Address, Bangalore",
+  "passoutBatch": "2020",
+  "branch": "Artificial Intelligence Engineering",
+  "industry": "Quantum Computing",
+  "company": "Tech Innovations Pvt Ltd",
+  "skills": ["Machine Learning", "Quantum Algorithms", "Deep Learning", "Research"],
+  "membershipID": "TEST-001",
+  "membershipType": "Member",
+  "photo": ""
+}
